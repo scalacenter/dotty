@@ -624,6 +624,7 @@ trait Implicits { self: Typer =>
           case id: Ident => id.symbol == lazyImplicit
           case _ => false
         }
+
         if (lazyImplicit.exists && refersToLazyImplicit)
           Block(ValDef(lazyImplicit.asTerm, arg).withPos(pos) :: Nil, ref(lazyImplicit))
         else
@@ -640,6 +641,10 @@ trait Implicits { self: Typer =>
           else
             EmptyTree
         if (!arg.isEmpty) arg
+        else if (ctx.macrosEnabled && formal.isRef(defn.WeakTypeTag)) {
+          /** Don't synthesize implicit TypeTags, let macro expansion does the job */
+          return Literal(Constant(null))
+        }
         else {
           var msgFn = (where: String) =>
             em"no implicit argument of type $formal found for $where" + failure.postscript
@@ -789,7 +794,8 @@ trait Implicits { self: Typer =>
           typed(untpd.Ident(ref.name) withPos pos.toSynthetic, funProto)(
             nestedContext.addMode(Mode.ImplicitShadowing).setExploreTyperState())
         def refSameAs(shadowing: Tree): Boolean =
-          ref.symbol == closureBody(shadowing).symbol || {
+          ref.symbol == closureBody(shadowing).symbol ||
+            generated1.symbol == closureBody(shadowing).symbol || {  // possible macro expansion
             shadowing match {
               case Trees.Select(qual, nme.apply) => refSameAs(qual)
               case Trees.Apply(fn, _) => refSameAs(fn)

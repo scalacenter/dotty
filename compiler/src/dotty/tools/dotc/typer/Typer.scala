@@ -1692,7 +1692,7 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
     record(s"typed $getClass")
     record("typed total")
     assertPositioned(tree)
-    try adapt(typedUnadapted(tree, pt), pt)
+    try adapt(typedUnadapted(tree, pt), pt, tree)
     catch {
       case ex: CyclicReference => errorTree(tree, cyclicErrorMsg(ex))
       case ex: TypeError => errorTree(tree, ex.getMessage)
@@ -1858,7 +1858,8 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
       if (tree.isDef) interpolateUndetVars(tree, tree.symbol)
       else if (!tree.tpe.widen.isInstanceOf[LambdaType]) interpolateUndetVars(tree, NoSymbol)
       tree.overwriteType(tree.tpe.simplified)
-      adaptInterpolated(tree, pt)
+      val tpdTree = adaptInterpolated(tree, pt, original)
+      macros.expandDefMacro(tpdTree, pt, this)
     }
   }
 

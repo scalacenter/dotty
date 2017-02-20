@@ -913,7 +913,6 @@ object Build {
       }.dependsOn(compile in Compile).evaluated
     )
 
-
   lazy val publishSettings = Seq(
     publishMavenStyle := true,
     isSnapshot := version.value.contains("SNAPSHOT"),
