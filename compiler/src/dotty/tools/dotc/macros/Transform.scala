@@ -21,7 +21,7 @@ import config.Printers.{ macros => debug }
  *  Macro definition is transformed from:
  *
  *    class macros {
- *      def f[T](a: A)(b: B): C = meta {
+ *      def f[T](a: A)(b: B): C = macro {
  *        body
  *      }
  *    }
@@ -97,7 +97,7 @@ private[macros] object Transform {
   def getMacros(tmpl: Template)(implicit ctx: Context): List[DefDef] = tmpl.body.filter {
     case mdef : DefDef =>
       mdef.rhs match {
-        case Apply(Ident(nme.meta), _) => true
+        case Apply(Ident(nme.`macro`), _) => true
         case _ => false
       }
     case _ => false
@@ -106,7 +106,7 @@ private[macros] object Transform {
 
   /** Create macro implementation method
    *
-   *     def f[T](a: A)(b: B): C = meta { body }
+   *     def f[T](a: A)(b: B): C = macro { body }
    *
    *  will be implemented by
    *
