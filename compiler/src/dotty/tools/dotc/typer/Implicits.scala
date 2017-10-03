@@ -789,7 +789,8 @@ trait Implicits { self: Typer =>
           typed(untpd.Ident(ref.name) withPos pos.toSynthetic, funProto)(
             nestedContext.addMode(Mode.ImplicitShadowing).setExploreTyperState())
         def refSameAs(shadowing: Tree): Boolean =
-          ref.symbol == closureBody(shadowing).symbol || {
+          ref.symbol == closureBody(shadowing).symbol ||
+            generated1.symbol == closureBody(shadowing).symbol || {  // possible macro expansion
             shadowing match {
               case Trees.Select(qual, nme.apply) => refSameAs(qual)
               case Trees.Apply(fn, _) => refSameAs(fn)

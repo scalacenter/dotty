@@ -17,3 +17,4 @@ addSbtPlugin("org.xerial.sbt" % "sbt-pack" % "0.8.2")
 
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.2.24")
 
+addSbtPlugin("org.foundweekends" % "sbt-bintray" % "0.5.1")

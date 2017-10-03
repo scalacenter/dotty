@@ -1858,7 +1858,8 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
       if (tree.isDef) interpolateUndetVars(tree, tree.symbol)
       else if (!tree.tpe.widen.isInstanceOf[LambdaType]) interpolateUndetVars(tree, NoSymbol)
       tree.overwriteType(tree.tpe.simplified)
-      adaptInterpolated(tree, pt)
+      val tpdTree = adaptInterpolated(tree, pt)
+      macros.expandDefMacro(tpdTree, pt, this)
     }
   }
 

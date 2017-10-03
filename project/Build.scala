@@ -1,3 +1,4 @@
+import bintray.BintrayKeys._
 import sbt.Keys._
 import sbt._
 import complete.DefaultParsers._
@@ -922,6 +923,7 @@ object Build {
       else
         Opts.resolver.sonatypeStaging
     ),
+    publishTo := publishTo.in(bintray).value,
     publishArtifact in Test := false,
     homepage := Some(url(dottyGithubUrl)),
     licenses += ("BSD New",
