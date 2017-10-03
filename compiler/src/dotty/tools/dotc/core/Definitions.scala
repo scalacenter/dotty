@@ -662,16 +662,6 @@ class Definitions {
   lazy val SetterMetaAnnotType = ctx.requiredClassRef("scala.annotation.meta.setter")
   def SetterMetaAnnot(implicit ctx: Context) = SetterMetaAnnotType.symbol.asClass
 
-  // macro-related definitions
-  def QuasiquoteHelper(implicit ctx: Context) = ctx.requiredClass("scala.gestalt.api.QuasiquoteHelper")
-  def q(implicit ctx: Context) = QuasiquoteHelper.requiredValue("q").info.classSymbol
-  def t(implicit ctx: Context) = QuasiquoteHelper.requiredValue("t").info.classSymbol
-
-  lazy val ToolboxType = ctx.requiredClassRef("scala.gestalt.core.Toolbox")
-  def Toolbox(implicit ctx: Context) = ToolboxType.symbol.asClass
-
-  def WeakTypeTag(implicit ctx: Context) = Toolbox.info.member("WeakTypeTag".toTypeName).symbol
-
   // convenient one-parameter method types
   def methOfAny(tp: Type) = MethodType(List(AnyType), tp)
   def methOfAnyVal(tp: Type) = MethodType(List(AnyValType), tp)

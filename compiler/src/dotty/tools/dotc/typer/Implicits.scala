@@ -624,7 +624,6 @@ trait Implicits { self: Typer =>
           case id: Ident => id.symbol == lazyImplicit
           case _ => false
         }
-
         if (lazyImplicit.exists && refersToLazyImplicit)
           Block(ValDef(lazyImplicit.asTerm, arg).withPos(pos) :: Nil, ref(lazyImplicit))
         else
@@ -641,10 +640,6 @@ trait Implicits { self: Typer =>
           else
             EmptyTree
         if (!arg.isEmpty) arg
-        else if (ctx.macrosEnabled && formal.isRef(defn.WeakTypeTag)) {
-          /** Don't synthesize implicit TypeTags, let macro expansion does the job */
-          return Literal(Constant(null))
-        }
         else {
           var msgFn = (where: String) =>
             em"no implicit argument of type $formal found for $where" + failure.postscript

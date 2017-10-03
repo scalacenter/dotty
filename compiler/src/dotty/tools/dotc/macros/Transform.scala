@@ -52,9 +52,8 @@ private[macros] object Transform {
     val macros = getMacros(tmpl)
     if (macros.isEmpty) return tree
 
-    val isAnnotMacroDef = isAnnotMacro(tmpl)
     val moduleName = tree.name + INLINE_SUFFIX
-    val implObj = createImplObject(moduleName, macros, isAnnotMacroDef)
+    val implObj = createImplObject(moduleName, macros)
     val implCls = TypeDef(moduleName.toTypeName, Template(emptyConstructor, Nil, EmptyValDef, Nil)).withPos(tree.pos) // required by @static
 
     val treeNew = cpy.TypeDef(tree)(rhs = newTemplate(tmpl, macros))
@@ -71,7 +70,7 @@ private[macros] object Transform {
     if (macros.isEmpty) return tree
 
     val moduleName = tree.name + nme.MODULE_SUFFIX.toString + INLINE_SUFFIX
-    val implObj = createImplObject(moduleName, macros, false)
+    val implObj = createImplObject(moduleName, macros)
     val implCls = TypeDef(moduleName.toTypeName, Template(emptyConstructor, Nil, EmptyValDef, Nil)).withPos(tree.pos) // required by @static
 
     val treeNew = cpy.ModuleDef(tree)(impl = newTemplate(tree.impl, macros), name = tree.name)
@@ -81,22 +80,6 @@ private[macros] object Transform {
     Thicket(List(treeNew, implObj, implCls))
   }
 
-  /** Does the template extend `StaticAnnotation`?
-   */
-  def isAnnotMacro(tmpl: Template)(implicit ctx: Context): Boolean = {
-    val acc = new UntypedTreeAccumulator[Boolean] {
-      def apply(cur: Boolean, tree: Tree)(implicit ctx: Context): Boolean = cur || (tree match {
-        case Ident(name)     => name.toString == "StaticAnnotation"
-        case Select(_, name) => name.toString == "StaticAnnotation"
-        case _ => foldOver(cur, tree)
-      })
-
-      override def foldOver(cur: Boolean, tree: Tree)(implicit ctx: Context): Boolean =
-        if (cur) cur else super.foldOver(cur, tree)
-    }
-
-    tmpl.parents.exists(acc(false, _))
-  }
 
   def newTemplate(tmpl: Template, macros: List[DefDef])(implicit ctx: Context): Template = {
      // modify macros body and flags
@@ -135,29 +118,20 @@ private[macros] object Transform {
    *  with `this` replaced by `prefix` in `body`
    *
    */
-  private def createImplMethod(defn: DefDef, isAnnotMacroDef: Boolean)(implicit ctx: Context): DefDef = {
+  private def createImplMethod(defn: DefDef)(implicit ctx: Context): DefDef = {
     val Apply(_, rhs :: Nil) = defn.rhs
 
-    val tb = Select(Select(Ident("scala".toTermName), "gestalt".toTermName), "api".toTermName)
+    val tb = Select(Ident("scala".toTermName), "macros".toTermName)
     val treeType = Select(tb, "Tree".toTypeName)
-    val termType = Select(tb, "TermTree".toTypeName)
-    val typedTreeType = Select(Select(tb, "tpd".toTermName), "Tree".toTypeName)
+    val termType = Select(tb, "Term".toTypeName)
 
-    val prefix = ValDef("prefix".toTermName, if (isAnnotMacroDef) termType else typedTreeType, EmptyTree).withFlags(TermParam)
+    val prefix = ValDef("prefix".toTermName, termType, EmptyTree).withFlags(TermParam)
     val typeParams = for (tdef: TypeDef <- defn.tparams)
-      yield ValDef(tdef.name.toTermName, typedTreeType, EmptyTree).withFlags(TermParam)
-
-    def paramType(vdef: ValDef): Tree = vdef.tpt match {
-      case AppliedTypeTree(f @ Ident(tpnme.WeakTypeTag), _) => AppliedTypeTree(f, Ident(tpnme.Nothing))
-      case AppliedTypeTree(f @ Select(_, tpnme.WeakTypeTag), _) => AppliedTypeTree(f, Ident(tpnme.Nothing))
-      case _ =>
-        if (isAnnotMacroDef) treeType
-        else typedTreeType
-    }
+      yield ValDef(tdef.name.toTermName, termType, EmptyTree).withFlags(TermParam)
 
     val termParams = for (params <- defn.vparamss)
       yield params.map { case vdef: ValDef =>
-        ValDef(vdef.name.toTermName, paramType(vdef), EmptyTree).withMods(vdef.mods | TermParam)
+        ValDef(vdef.name.toTermName, termType, EmptyTree).withMods(vdef.mods | TermParam)
       }
 
     val params =
@@ -181,8 +155,8 @@ private[macros] object Transform {
   }
 
   /** create object A$inline to hold all macros implementations for class A */
-  def createImplObject(name: String, macros: List[DefDef], isAnnotMacroDef: Boolean)(implicit ctx: Context): Tree = {
-    val methods = macros.map(createImplMethod(_, isAnnotMacroDef))
+  def createImplObject(name: String, macros: List[DefDef])(implicit ctx: Context): Tree = {
+    val methods = macros.map(createImplMethod(_))
     val constr = DefDef(nme.CONSTRUCTOR, Nil, Nil, TypeTree(), EmptyTree)
     val templ = Template(constr, Nil, EmptyValDef, methods)
     ModuleDef(name.toTermName, templ)
