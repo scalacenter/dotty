@@ -85,7 +85,8 @@ package object macros {
    *      @static def f(prefix: scala.macros.Term)
     *                  (T:      scala.macros.Type)
     *                  (a:      scala.macros.Term)
-    *                  (b:      scala.macros.Term): scala.macros.Tree = body
+    *                  (b:      scala.macros.Term)
+    *                  (m:      scala.macros.Mirror): scala.macros.Tree = body
    *    }
    */
   def transform(tree: Tree)(implicit ctx: Context): Tree = {
