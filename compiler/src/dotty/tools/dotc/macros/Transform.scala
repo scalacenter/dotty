@@ -32,15 +32,15 @@ import config.Printers.{ macros => debug }
  *      <macro> def f[T](a: A)(b: B): C = ???
  *    }
  *
- *    object main$inline {
- *      @static def f(prefix: Tree)(T: TypeTree)(a: Tree)(b: Tree): Tree = body
+ *    object main$macro {
+ *      @static def f(prefix: Tree)(T: TypeTree)(a: Tree)(b: Tree)(implicit m: Mirror): Tree = body
  *    }
  */
 
 private[macros] object Transform {
   import untpd._
 
-  val INLINE_SUFFIX = str.NAME_JOIN + "inline"
+  val IMPL_SUFFIX = str.NAME_JOIN + "macro"
 
   /** Transform macros definitions inside class definitions (see the note above)
    */
@@ -52,7 +52,7 @@ private[macros] object Transform {
     val macros = getMacros(tmpl)
     if (macros.isEmpty) return tree
 
-    val moduleName = tree.name + INLINE_SUFFIX
+    val moduleName = tree.name + IMPL_SUFFIX
     val implObj = createImplObject(moduleName, macros)
     val implCls = TypeDef(moduleName.toTypeName, Template(emptyConstructor, Nil, EmptyValDef, Nil)).withPos(tree.pos) // required by @static
 
@@ -69,7 +69,7 @@ private[macros] object Transform {
     val macros = getMacros(tree.impl)
     if (macros.isEmpty) return tree
 
-    val moduleName = tree.name + nme.MODULE_SUFFIX.toString + INLINE_SUFFIX
+    val moduleName = tree.name + nme.MODULE_SUFFIX.toString + IMPL_SUFFIX
     val implObj = createImplObject(moduleName, macros)
     val implCls = TypeDef(moduleName.toTypeName, Template(emptyConstructor, Nil, EmptyValDef, Nil)).withPos(tree.pos) // required by @static
 
@@ -113,7 +113,7 @@ private[macros] object Transform {
    *    @static
    *    def f(prefix: TermTree)
    *         (T: TypeTree)
-   *         (a: TermTree)(b: TermTree): Tree = body
+   *         (a: TermTree)(b: TermTree)(implicit mirror: Mirror): Tree = body
    *
    *  with `this` replaced by `prefix` in `body`
    *
@@ -124,19 +124,24 @@ private[macros] object Transform {
     val tb = Select(Ident("scala".toTermName), "macros".toTermName)
     val treeType = Select(tb, "Tree".toTypeName)
     val termType = Select(tb, "Term".toTypeName)
+    val typeType = Select(tb, "Type".toTypeName)
+    val mirrorType = Select(tb, "Mirror".toTypeName)
 
     val prefix = ValDef("prefix".toTermName, termType, EmptyTree).withFlags(TermParam)
-    val typeParams = for (tdef: TypeDef <- defn.tparams)
-      yield ValDef(tdef.name.toTermName, termType, EmptyTree).withFlags(TermParam)
 
-    val termParams = for (params <- defn.vparamss)
+    val typeParams = for (tdef: TypeDef <- defn.tparams)
+      yield ValDef(tdef.name.toTermName, typeType, EmptyTree).withFlags(TermParam)
+
+    val termParamss = for (params <- defn.vparamss)
       yield params.map { case vdef: ValDef =>
         ValDef(vdef.name.toTermName, termType, EmptyTree).withMods(vdef.mods | TermParam)
       }
 
-    val params =
-      if (typeParams.size > 0) List(prefix) :: typeParams :: termParams
-      else List(prefix) :: termParams
+    val mirror = ValDef("m".toTermName, mirrorType, EmptyTree).withFlags(TermParam | Implicit)
+
+    val paramss =
+      if (typeParams.size > 0) List(prefix) :: typeParams :: (termParamss :+ List(mirror))
+      else List(prefix) :: (termParamss :+ List(mirror))
 
     // replace `this` with `prefix`
     val mapper = new UntypedTreeMap {
@@ -151,7 +156,7 @@ private[macros] object Transform {
     val body = mapper.transform(rhs)
     val static = Apply(Select(New(ref(ctx.definitions.ScalaStaticAnnotType).withPos(defn.pos)), nme.CONSTRUCTOR), Nil)
     val mods = EmptyModifiers.withAddedAnnotation(static).withFlags(Synthetic)
-    DefDef(defn.name, Nil, params, treeType, body).withMods(mods)
+    DefDef(defn.name, Nil, paramss, treeType, body).withMods(mods)
   }
 
   /** create object A$inline to hold all macros implementations for class A */
