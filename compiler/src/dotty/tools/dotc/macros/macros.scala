@@ -36,8 +36,10 @@ package object macros {
   /** Expand def macros */
   def expandDefMacro(tree: tpd.Tree, pt: Type, typer: Typer)(implicit ctx: Context): tpd.Tree = {
     def isMacroApplyEnd: Boolean =
-      (tree.isInstanceOf[tpd.Apply] || tree.isInstanceOf[tpd.TypeApply]) &&
-        !tree.tpe.isError && tree.tpe.isValueType && macros.isDefMacro(tree.symbol)
+      !tree.tpe.isError &&
+        tree.isTerm &&
+        tree.tpe.widen.widenExpr.isValueType &&
+        macros.isDefMacro(tree.symbol)
 
     def expanded: Tree = {
       // instantiate tvars as much as possible before macro expansion
@@ -56,7 +58,7 @@ package object macros {
     // e.g. macros with missing implicit arguments will take the expected value type instead of ImplicitMethod
     if (!ctx.reporter.hasErrors && isMacroApplyEnd)
       if (ctx.macrosEnabled) typer.typed(expanded, pt)
-      else errorTree(tree, s"can't expand macro, make sure `scala.gestalt` is in -classpath")
+      else errorTree(tree, s"can't expand macro, make sure `scala.macros` is in -classpath")
     else tree
   }
 
