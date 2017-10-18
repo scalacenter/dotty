@@ -33,7 +33,7 @@ import config.Printers.{ macros => debug }
  *    }
  *
  *    object main$macro {
- *      @static def f(prefix: Tree)(T: TypeTree)(a: Tree)(b: Tree)(implicit m: Mirror): Tree = body
+ *      @static def f(prefix: Tree)(T: Type)(a: tpd.Term)(b: tpd.Term)(implicit m: Mirror): Term = body
  *    }
  */
 
@@ -111,9 +111,9 @@ private[macros] object Transform {
    *  will be implemented by
    *
    *    @static
-   *    def f(prefix: TermTree)
-   *         (T: TypeTree)
-   *         (a: TermTree)(b: TermTree)(implicit mirror: Mirror): Tree = body
+   *    def f(prefix: tpd.Term)
+   *         (T: Type)
+   *         (a: tpd.Term)(b: tpd.Term)(implicit mirror: Mirror): Term = body
    *
    *  with `this` replaced by `prefix` in `body`
    *
@@ -122,8 +122,8 @@ private[macros] object Transform {
     val Apply(_, rhs :: Nil) = defn.rhs
 
     val tb = Select(Ident("scala".toTermName), "macros".toTermName)
-    val treeType = Select(tb, "Tree".toTypeName)
-    val termType = Select(tb, "Term".toTypeName)
+    val resType = Select(tb, "Term".toTypeName)
+    val termType = Select(Select(tb, "tpd".toTermName), "Term".toTypeName)
     val typeType = Select(tb, "Type".toTypeName)
     val mirrorType = Select(tb, "Mirror".toTypeName)
 
@@ -156,7 +156,7 @@ private[macros] object Transform {
     val body = mapper.transform(rhs)
     val static = Apply(Select(New(ref(ctx.definitions.ScalaStaticAnnotType).withPos(defn.pos)), nme.CONSTRUCTOR), Nil)
     val mods = EmptyModifiers.withAddedAnnotation(static).withFlags(Synthetic)
-    DefDef(defn.name, Nil, paramss, treeType, body).withMods(mods)
+    DefDef(defn.name, Nil, paramss, resType, body).withMods(mods)
   }
 
   /** create object A$inline to hold all macros implementations for class A */
