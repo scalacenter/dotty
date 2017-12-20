@@ -12,7 +12,6 @@ import config.Printers.{macros => debug}
 import typer.{ForceDegree, Inferencing, Typer}
 
 package object macros {
-  import untpd._
 
   private class Proxy(clazz: Class[_], module: AnyRef) {
     def apply(name: String, params: Object*) = {
@@ -41,7 +40,7 @@ package object macros {
         tree.tpe.widen.widenExpr.isValueType &&
         macros.isDefMacro(tree.symbol)
 
-    def expanded: Tree = {
+    def expanded: untpd.Tree = {
       // instantiate tvars as much as possible before macro expansion
       tree match {
         case tapply: tpd.TypeApply =>
@@ -49,7 +48,7 @@ package object macros {
         case _ =>
       }
 
-      val res = forObject("scala.macros.internal.engines.dotc.Expander").apply("expandDefMacro", tree, ctx).asInstanceOf[Tree]
+      val res = forObject("scala.macros.internal.engines.dotc.Expander").apply("expandDefMacro", tree, ctx).asInstanceOf[untpd.Tree]
       debug.println(i"def macro expansion: $tree expands to $res")
       res
     }
@@ -62,45 +61,37 @@ package object macros {
     else tree
   }
 
-  /** Transform macro definitions in class definition
+  /** Type check def macro
    *
-   *  @param tree  the tree that may contain macro definition, the tree may be a thicket
-   *  @returns     the transformed tree
+   *  precondition: tparams and params must have already been typechecked
    *
-   *  @note The returned tree NEEDs desugaring
+   *  def foo[T](e: T) = macro impl[T]
+   *  def impl(c: Context)(T: Type)(e: tpd.Term): Term
    *
-   *  Macro definition is transformed from:
-   *
-   *    class macros {
-   *      def f[T](a: A)(b: B): C = macro {
-   *        body
-   *      }
-   *    }
-   *
-   *  to:
-   *
-   *    class main {
-   *      <macro> def f[T](a: A)(b: B): C = ???
-   *    }
-   *
-   *    object main$inline {
-   *      @static def f(prefix: scala.macros.tpd.Term)
-    *                  (T:      scala.macros.Type)
-    *                  (a:      scala.macros.tpd.Term)
-    *                  (b:      scala.macros.tpd.Term)
-    *                  (m:      scala.macros.Mirror): scala.macros.Term = body
-   *    }
+   *  ==>
+   *  @macroImpl(impl[T])
+   *  def foo[T](e: T) = ???
    */
-  def transform(tree: Tree)(implicit ctx: Context): Tree = {
-    tree match {
-      case cdef: TypeDef if cdef.isClassDef =>
-        Transform.transform(cdef)
-      case mdef: ModuleDef =>
-        Transform.transform(mdef)
-      case thicket: Thicket =>
-        Thicket(thicket.trees.map(transform))
-      case _ =>
-        tree
+  def typecheck(ddef: untpd.DefDef, sym: Symbol, typer: Typer)(implicit ctx: Context): tpd.DefDef = {
+    import Trees._
+
+    val (implRef: tpd.Tree, tparams: List[tpd.Tree]) = ddef.rhs match {
+      case Apply(Ident(nme.`macro`), TypeApply(implRef, targs) :: Nil) =>
+        (typer.typedUnadapted(implRef), targs.map(typer.typedUnadapted(_)))
+      case Apply(Ident(nme.`macro`), implRef :: Nil) =>
+        (typer.typedUnadapted(implRef), Nil)
     }
+
+    // TODO: add checking for matching of macro impl and decl
+    if (!implRef.symbol.isStatic)
+      ctx.error("macro implementation method must be accessible with a stable prefix", implRef.pos)
+
+    val tree = untpd.Block(tparams, implRef).withType(defn.AnyType)
+    val annot = Annotations.Annotation(tree)
+
+    sym.addAnnotation(annot)
+    sym.setFlag(Flags.Macro)
+
+    typer.assignType(untpd.cpy.DefDef(ddef)(rhs = tpd.ref(defn.Predef_undefined)), sym)
   }
 }

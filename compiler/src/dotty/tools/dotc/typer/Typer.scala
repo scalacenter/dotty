@@ -1305,20 +1305,30 @@ class Typer extends Namer with TypeAssigner with Applications with Implicits wit
       (tparams1, sym.owner.typeParams).zipped.foreach ((tdef, tparam) =>
         rhsCtx.gadt.setBounds(tdef.symbol, TypeAlias(tparam.typeRef)))
     }
-    val rhs1 = typedExpr(ddef.rhs, tpt1.tpe)(rhsCtx)
 
-    // Overwrite inline body to make sure it is not evaluated twice
-    if (sym.isInlineMethod) Inliner.registerInlineInfo(sym, _ => rhs1)
-
-    if (sym.isAnonymousFunction) {
-      // If we define an anonymous function, make sure the return type does not
-      // refer to parameters. This is necessary because closure types are
-      // function types so no dependencies on parameters are allowed.
-      tpt1 = tpt1.withType(avoid(tpt1.tpe, vparamss1.flatMap(_.map(_.symbol))))
+    val isMacro: Boolean = ddef.rhs match {
+      case Apply(Ident(nme.`macro`), _) => true
+      case _ => false
     }
 
-    assignType(cpy.DefDef(ddef)(name, tparams1, vparamss1, tpt1, rhs1), sym)
-    //todo: make sure dependent method types do not depend on implicits or by-name params
+    if (isMacro)
+      macros.typecheck(cpy.DefDef(ddef)(name, tparams1, vparamss1, tpt1), sym, this)(rhsCtx)
+    else {
+      val rhs1 = typedExpr(ddef.rhs, tpt1.tpe)(rhsCtx)
+
+      // Overwrite inline body to make sure it is not evaluated twice
+      if (sym.isInlineMethod) Inliner.registerInlineInfo(sym, _ => rhs1)
+
+      if (sym.isAnonymousFunction) {
+        // If we define an anonymous function, make sure the return type does not
+        // refer to parameters. This is necessary because closure types are
+        // function types so no dependencies on parameters are allowed.
+        tpt1 = tpt1.withType(avoid(tpt1.tpe, vparamss1.flatMap(_.map(_.symbol))))
+      }
+
+      assignType(cpy.DefDef(ddef)(name, tparams1, vparamss1, tpt1, rhs1), sym)
+      //todo: make sure dependent method types do not depend on implicits or by-name params
+    }
   }
 
   def typedTypeDef(tdef: untpd.TypeDef, sym: Symbol)(implicit ctx: Context): Tree = track("typedTypeDef") {
